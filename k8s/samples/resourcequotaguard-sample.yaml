@@ -1,0 +1,11 @@
+apiVersion: operator.example.com/v1alpha1
+kind: ResourceQuotaGuard
+metadata:
+  name: demo-quota-guard
+  namespace: default
+spec:
+  targetNamespace: default
+  thresholdPercent: 80
+  workloadLabelKey: app
+  workloadLabelValue: scale-me
+  # notificationWebhookUrl: https://example.com/hooks/quota

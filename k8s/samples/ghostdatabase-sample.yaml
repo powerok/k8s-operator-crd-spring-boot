@@ -1,0 +1,11 @@
+apiVersion: operator.example.com/v1alpha1
+kind: GhostDatabase
+metadata:
+  name: demo-db
+  namespace: default
+spec:
+  databaseName: appdb
+  storageSize: 1Gi
+  initSql: |
+    CREATE TABLE IF NOT EXISTS hello (id serial PRIMARY KEY, msg text);
+    INSERT INTO hello (msg) VALUES ('from GhostDatabase operator');

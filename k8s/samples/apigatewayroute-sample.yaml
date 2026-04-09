@@ -1,0 +1,14 @@
+apiVersion: operator.example.com/v1alpha1
+kind: ApiGatewayRoute
+metadata:
+  name: demo-api-route
+  namespace: default
+spec:
+  host: api.example.test
+  pathPrefix: /api
+  backendServiceName: backend-svc
+  backendPort: 8080
+  ingressClassName: nginx
+  requireAuth: false
+  # mergeIntoIngress: shared-ingress
+  # authSecretName: basic-auth

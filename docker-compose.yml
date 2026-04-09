@@ -1,0 +1,59 @@
+# k3s cluster setup via docker-compose
+# WSL에서 실행 후 `kubectl` 설정을 위해 kubeconfig 파일을 추출해야 합니다.
+services:
+  k3s:
+    image: rancher/k3s:v1.27.3-k3s1
+    command: server --disable traefik --disable servicelb
+    privileged: true
+    ports:
+      - "6443:6443" # API Server
+    environment:
+      - K3S_TOKEN=k8s-operator-token
+      - K3S_KUBECONFIG_OUTPUT=/output/kubeconfig.yaml
+      - K3S_KUBECONFIG_MODE=644
+    volumes:
+      - k3s-data:/var/lib/rancher/k3s
+      - .:/output
+    healthcheck:
+      test: ["CMD", "kubectl", "get", "--raw", "/readyz"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
+
+  operator:
+    build: .
+    depends_on:
+      k3s:
+        condition: service_healthy
+    # kubeconfig의 server URL(127.0.0.1)을 k3s 컨테이너 이름으로 치환 후 실행
+    entrypoint:
+      - sh
+      - -c
+      - |
+        set -e
+        echo "Waiting for kubeconfig to appear..."
+        while [ ! -f /output/kubeconfig.yaml ]; do sleep 2; done
+        echo "Patching kubeconfig server URL..."
+        sed 's|https://127.0.0.1:6443|https://k3s:6443|g' /output/kubeconfig.yaml > /tmp/kubeconfig.yaml
+        export KUBECONFIG=/tmp/kubeconfig.yaml
+        echo "Applying CRDs..."
+        for crd in /app/kubernetes/*-v1.yml; do
+          [ -f "$$crd" ] && kubectl apply --validate=false --insecure-skip-tls-verify=true -f "$$crd" && echo "Applied: $$crd" || true
+        done
+        echo "Waiting for CRDs to be established..."
+        sleep 5
+        echo "Creating dummy deployment 'your-deployment' for testing..."
+        kubectl get deployment your-deployment --insecure-skip-tls-verify=true >/dev/null 2>&1 || kubectl create deployment your-deployment --image=nginx --insecure-skip-tls-verify=true || true
+        echo "Starting operator..."
+        exec java -jar /app/quarkus-run.jar
+    environment:
+      - QUARKUS_KUBERNETES_CLIENT_MASTER_URL=https://k3s:6443
+      - QUARKUS_KUBERNETES_CLIENT_TRUST_CERTS=true
+    volumes:
+      - .:/output:ro
+    ports:
+      - "8080:8080"
+
+volumes:
+  k3s-data:

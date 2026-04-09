@@ -1,0 +1,13 @@
+apiVersion: operator.example.com/v1alpha1
+kind: MaintenanceWindow
+metadata:
+  name: demo-hours
+  namespace: default
+spec:
+  targetNamespace: default
+  deploymentName: your-deployment
+  timezone: Asia/Seoul
+  windowStart: "09:00"
+  windowEnd: "18:00"
+  replicasDuringWindow: 2
+  replicasOutsideWindow: 0

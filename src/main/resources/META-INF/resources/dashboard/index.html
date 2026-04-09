@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Operator 대시보드 · k8s-operator</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/tokyo-night-dark.min.css" />
+  <link rel="stylesheet" href="./styles.css" />
+  <style>
+    [v-cloak] { display: none !important; }
+    body { font-family: "DM Sans", var(--font); }
+  </style>
+</head>
+<body>
+  <div id="app" v-cloak>
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark">K8s</div>
+        <div>
+          <h1>Operator 대시보드</h1>
+          <span>operator.example.com CRD 관리 · YAML 테스트</span>
+        </div>
+      </div>
+      <div class="top-actions">
+        <span v-if="health" class="pill" :class="health.ok ? 'ok' : 'err'">
+          {{ health.ok ? '● 클러스터 연결됨' : '○ 연결 실패' }}
+        </span>
+        <span v-if="health && health.ok && health.gitVersion" class="pill">{{ health.gitVersion }}</span>
+        <button type="button" class="btn btn-ghost" @click="toggleTheme" :title="theme === 'dark' ? '라이트 모드' : '다크 모드'">
+          {{ theme === 'dark' ? '라이트' : '다크' }}
+        </button>
+        <button type="button" class="btn btn-primary" @click="openApplyModal">YAML 적용</button>
+        <button type="button" class="btn" @click="refreshAll" :disabled="loading">새로고침</button>
+      </div>
+    </header>
+
+    <div class="shell">
+      <aside class="sidebar">
+        <h2>리소스 종류</h2>
+        <button
+          v-for="k in kinds"
+          :key="k.plural"
+          type="button"
+          class="nav-item"
+          :class="{ active: selectedPlural === k.plural }"
+          @click="selectKind(k.plural)"
+        >
+          <span class="nav-icon">{{ kindIcon(k.kind) }}</span>
+          <span class="nav-text">
+            <strong>{{ k.kind }}</strong>
+            <small>{{ k.description }}</small>
+          </span>
+        </button>
+      </aside>
+
+      <main class="main">
+        <div class="grid-stats">
+          <div class="stat">
+            <b>{{ rows.length }}</b>
+            <span>현재 목록</span>
+          </div>
+          <div class="stat">
+            <b>{{ kinds.length }}</b>
+            <span>CRD 종류</span>
+          </div>
+          <div class="stat">
+            <b>{{ namespaces.length }}</b>
+            <span>네임스페이스</span>
+          </div>
+        </div>
+
+        <div class="toolbar">
+          <label>
+            네임스페이스
+            <select v-model="namespace" @change="loadRows">
+              <option v-for="n in namespaces" :key="n" :value="n">{{ n }}</option>
+            </select>
+          </label>
+          <input type="search" v-model.trim="filterText" placeholder="이름으로 검색…" />
+          <button type="button" class="btn btn-sm" @click="loadSampleToApply">현재 종류 샘플 불러오기</button>
+        </div>
+
+        <p v-if="listWarning" class="pill err" style="margin-bottom:0.75rem;width:fit-content">{{ listWarning }}</p>
+
+        <p v-if="loading" class="empty">목록을 불러오는 중…</p>
+
+        <div v-else-if="filteredRows.length === 0" class="empty">
+          리소스가 없거나 필터에 맞는 항목이 없습니다.<br />
+          <button type="button" class="btn btn-primary" style="margin-top:1rem" @click="openApplyModal">YAML로 생성하기</button>
+        </div>
+
+        <div v-else-if="!loading" class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>이름</th>
+                <th>Phase</th>
+                <th>생성 시각</th>
+                <th>작업</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="r in filteredRows" :key="r.uid + r.name">
+                <td class="mono">{{ r.name }}</td>
+                <td><span class="badge" :class="phaseClass(r.phase)">{{ r.phase }}</span></td>
+                <td class="mono" style="color:var(--text-muted)">{{ r.creationTimestamp }}</td>
+                <td>
+                  <div class="row-actions">
+                    <button type="button" class="btn btn-sm" @click="viewYaml(r)">YAML</button>
+                    <button type="button" class="btn btn-sm" @click="copyName(r.name)">이름 복사</button>
+                    <button type="button" class="btn btn-sm btn-danger" @click="confirmDelete(r)">삭제</button>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="panel">
+          <h3>API 테스트 · 활동 로그</h3>
+          <div class="tabs">
+            <button type="button" class="tab" :class="{ active: testTab === 'ping' }" @click="testTab = 'ping'">Ping</button>
+            <button type="button" class="tab" :class="{ active: testTab === 'health' }" @click="testTab = 'health'">Health JSON</button>
+          </div>
+          <div v-if="testTab === 'ping'" class="test-area">
+            <textarea class="code" v-model="testPingBody" style="min-height:100px" placeholder='{"hello":"world"}'></textarea>
+            <button type="button" class="btn btn-sm btn-primary" style="margin-top:0.5rem" @click="runPing">POST /test/ping</button>
+            <pre v-if="testPingResult" class="hljs" style="margin-top:0.75rem;border:1px solid var(--border);padding:0.75rem;border-radius:12px;overflow:auto">{{ testPingResult }}</pre>
+          </div>
+          <div v-else>
+            <button type="button" class="btn btn-sm" @click="runHealthJson">GET /health 원본 보기</button>
+            <pre v-if="healthJson" class="hljs" style="margin-top:0.75rem;border:1px solid var(--border);padding:0.75rem;border-radius:12px;overflow:auto">{{ healthJson }}</pre>
+          </div>
+          <div v-for="(l, i) in activityLog" :key="i" class="log-line">{{ l }}</div>
+        </div>
+      </main>
+    </div>
+
+    <div v-if="modal === 'apply'" class="modal-backdrop" @click.self="closeModal">
+      <div class="modal">
+        <div class="modal-head">
+          <h2>YAML 적용 · createOrReplace</h2>
+          <button type="button" class="btn btn-sm btn-ghost" @click="closeModal">닫기</button>
+        </div>
+        <div class="modal-body">
+          <label class="toolbar" style="margin-bottom:0.75rem">
+            대상 네임스페이스
+            <select v-model="applyNamespace">
+              <option v-for="n in namespaces" :key="'a'+n" :value="n">{{ n }}</option>
+            </select>
+          </label>
+          <textarea class="code" v-model="applyYamlText" placeholder="apiVersion / kind / metadata / spec …"></textarea>
+        </div>
+        <div class="modal-foot">
+          <button type="button" class="btn" @click="loadSampleToApply">샘플</button>
+          <button type="button" class="btn btn-primary" :disabled="applyBusy" @click="submitApply">{{ applyBusy ? '적용 중…' : '클러스터에 적용' }}</button>
+        </div>
+      </div>
+    </div>
+
+    <div v-if="modal === 'view'" class="modal-backdrop" @click.self="closeModal">
+      <div class="modal">
+        <div class="modal-head">
+          <h2>{{ viewTitle }}</h2>
+          <button type="button" class="btn btn-sm btn-ghost" @click="closeModal">닫기</button>
+        </div>
+        <div class="modal-body">
+          <pre><code class="language-yaml hljs" v-html="highlightedViewYaml"></code></pre>
+        </div>
+        <div class="modal-foot">
+          <button type="button" class="btn" @click="copyYaml">YAML 복사</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="toasts">
+      <div v-for="t in toasts" :key="t.id" class="toast" :class="t.type">{{ t.text }}</div>
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/yaml.min.js"></script>
+  <script src="./app.js"></script>
+</body>
+</html>

@@ -1,0 +1,8 @@
+apiVersion: operator.example.com/v1alpha1
+kind: StaticSiteDeployer
+metadata:
+  name: demo-site
+  namespace: default
+spec:
+  gitRepoUrl: https://github.com/octocat/Hello-World.git
+  branch: master

@@ -1,0 +1,24 @@
+Prerequisites: JDK 17+, Apache Maven 3.9+, Kubernetes cluster (kind/k3d/minikube), kubectl.
+
+Build:
+  cd k8s-operator
+  mvn -DskipTests package
+
+CRD YAML is generated under target/kubernetes/ (Quarkus Operator SDK). Apply:
+  kubectl apply -f target/kubernetes/
+
+Run operator locally (uses current kubeconfig):
+  java -jar target/quarkus-app/quarkus-run.jar
+
+Or dev mode:
+  mvn quarkus:dev
+
+Web dashboard (Vue 3 CDN): open http://localhost:8080/dashboard/
+  Requires valid kubeconfig; REST under /api/dashboard/
+
+Sample custom resources: k8s/samples/
+
+Integration: create a namespace, apply CRDs, apply samples, watch pods/ingress.
+
+Docker image (requires Docker):
+  mvn package -Dquarkus.container-image.build=true
