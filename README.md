@@ -2,6 +2,13 @@
 
 본 프로젝트는 [Quarkus Operator SDK](https://quarkus.io/guides/operator-sdk)를 기반으로 작성된 쿠버네티스 오퍼레이터(Kubernetes Operator) 환경입니다. Docker Compose와 k3s를 연동하여 로컬 환경에서 신속하게 개발 및 테스트할 수 있도록 설계되었습니다.
 
+### Screen Captures
+
+![Dashboard](screenCaptures/01.dashboard.png)
+![YAML Apply](screenCaptures/02.yaml-apply.png)
+![Dashboard After Apply](screenCaptures/03.dashboard-after-apply.png)
+![K3s CRDs](screenCaptures/04.k3s-crds.png)
+
 ## 주요 기능 및 구성요소
 이 오퍼레이터는 다수의 Custom Resource Definition(CRD)을 내장하고 있으며, 각 리소스를 자동으로 제어하는 Reconciler 컨트롤러가 포함되어 있습니다.
 
